@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Tabelas SQLite</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        .container { max-width: 900px; margin: auto; background: #f9f9f9; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .table-list ul { list-style: none; padding: 0; }
+        .table-list li { background: #eef; margin-bottom: 5px; padding: 10px; border-radius: 4px; cursor: pointer; }
+        .table-list li:hover { background: #dde; }
+        .table-details { margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .back-link { display: block; margin-top: 20px; text-decoration: none; color: #007bff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gerenciador de Tabelas SQLite</h1>
+        <a href="/" class="back-link">Voltar para o Início</a>
+
+        <div class="table-list">
+            <h2>Tabelas</h2>
+            <ul id="tables-list">
+                {% for table in tables %}
+                    <li data-table-name="{{ table }}">{{ table }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="table-details" id="table-details">
+            <!-- Table schema and data will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tablesList = document.getElementById('tables-list');
+            const tableDetails = document.getElementById('table-details');
+
+            tablesList.addEventListener('click', function(event) {
+                if (event.target.tagName === 'LI') {
+                    const tableName = event.target.dataset.tableName;
+                    loadTableDetails(tableName);
+                }
+            });
+
+            function loadTableDetails(tableName) {
+                fetch(`/table_data/${tableName}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        tableDetails.innerHTML = `<h2>Detalhes da Tabela: ${tableName}</h2>`;
+
+                        // Display Schema
+                        if (data.schema && data.schema.length > 0) {
+                            let schemaHtml = '<h3>Esquema</h3><table><thead><tr>';
+                            for (const key in data.schema[0]) {
+                                schemaHtml += `<th>${key}</th>`;
+                            }
+                            schemaHtml += '</tr></thead><tbody>';
+                            data.schema.forEach(row => {
+                                schemaHtml += '<tr>';
+                                for (const key in row) {
+                                    schemaHtml += `<td>${row[key]}</td>`;
+                                }
+                                schemaHtml += '</tr>';
+                            });
+                            schemaHtml += '</tbody></table>';
+                            tableDetails.innerHTML += schemaHtml;
+                        } else {
+                            tableDetails.innerHTML += '<p>Nenhuma informação de esquema disponível.</p>';
+                        }
+
+                        // Display Data
+                        // Display Data
+                        if (data.data && data.data.length > 0) {
+                            let dataHtml = '<h3>Dados (primeiras 100 linhas)</h3><table><thead><tr>';
+                            for (const key in data.data[0]) {
+                                dataHtml += `<th>${key}</th>`;
+                            }
+                            dataHtml += `<th>Ações</th>`; // For delete button
+                            dataHtml += '</tr></thead><tbody>';
+                            data.data.forEach(row => {
+                                dataHtml += '<tr>';
+                                for (const key in row) {
+                                    dataHtml += `<td>${row[key]}</td>`;
+                                }
+                                dataHtml += `<td><button class="delete-record-btn" data-table-name="${tableName}" data-id="${row.id}">Excluir</button></td>`;
+                                dataHtml += '</tr>';
+                            });
+                            dataHtml += '</tbody></table>';
+                            tableDetails.innerHTML += dataHtml;
+
+
+                        } else {
+                            tableDetails.innerHTML += '<p>Nenhum dado disponível para esta tabela.</p>';
+                        }
+
+                        // Add Record Form
+                        tableDetails.innerHTML += `
+                            <h3>Adicionar Novo Registro</h3>
+                            <div id="add-record-form-container">
+                                <form id="add-record-form">
+                                    <!-- Dynamic input fields will be added here -->
+                                    <button type="submit">Adicionar Registro</button>
+                                </form>
+                            </div>
+                        `;
+
+                        // Populate add record form with schema fields
+                        const addRecordForm = document.getElementById('add-record-form');
+                        if (data.schema && data.schema.length > 0) {
+                            data.schema.forEach(column => {
+                                if (column.name !== 'id') { // Exclude 'id' field as it's usually auto-incremented
+                                    const inputGroup = document.createElement('div');
+                                    inputGroup.innerHTML = `
+                                        <label for="add-${column.name}">${column.name}:</label>
+                                        <input type="text" id="add-${column.name}" name="${column.name}">
+                                    `;
+                                    addRecordForm.prepend(inputGroup); // Add to the beginning of the form
+                                }
+                            });
+                        }
+
+
+
+                    })
+                    .catch(error => {
+                        console.error('Erro ao carregar detalhes da tabela:', error);
+                        tableDetails.innerHTML = `<p>Erro ao carregar detalhes para a tabela: ${tableName}</p>`;
+                    });
+            }
+            // Event listener for delete buttons (using event delegation)
+            document.addEventListener('click', function(event) {
+                if (event.target.classList.contains('delete-record-btn')) {
+                    const button = event.target;
+                    const recordId = button.dataset.id;
+                    const tableName = button.dataset.tableName;
+                    console.log('Botão Excluir clicado para o ID:', recordId, 'na tabela:', tableName);
+                    if (confirm(`Tem certeza que deseja excluir o registro com ID ${recordId} da tabela ${tableName}?`)) {
+                        fetch(`/delete_record/${tableName}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ id: recordId }),
+                            })
+                            .then(response => response.json())
+                            .then(result => {
+                                if (result.success) {
+                                    alert('Registro excluído com sucesso!');
+                                    loadTableDetails(tableName); // Reload table data
+                                } else {
+                                    alert(`Erro ao excluir registro: ${result.error}`);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erro ao excluir registro:', error);
+                                alert('Ocorreu um erro ao excluir o registro.');
+                            });
+                    }
+                }
+            });
+
+            // Event listener for Add Record Form
+            tableDetails.addEventListener('submit', function(e) {
+                if (e.target && e.target.id === 'add-record-form') {
+                    e.preventDefault();
+                    const addRecordForm = e.target;
+                    const formData = new FormData(addRecordForm);
+                    const newRecord = {};
+                    for (const [key, value] of formData.entries()) {
+                        newRecord[key] = value;
+                    }
+                    console.log('Dados do novo registro:', newRecord); // Adicionado para depuração
+                    // Get the current table name from the displayed details
+                    const currentTableName = tableDetails.querySelector('h2').textContent.replace('Detalhes da Tabela: ', '');
+
+                    fetch(`/add_record/${currentTableName}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(newRecord),
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            alert('Registro adicionado com sucesso!');
+                            loadTableDetails(currentTableName); // Reload table data
+                        } else {
+                            alert(`Erro ao adicionar registro: ${result.error}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao adicionar registro:', error);
+                        alert('Ocorreu um erro ao adicionar o registro.');
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
